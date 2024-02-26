@@ -1,0 +1,4 @@
+[submodule "redmine_plugins/redmine_asap_theme"]
+	path = redmine_plugins/redmine_asap_theme
+	url = https://github.com/tantic/redmine_asap_theme.git
+	branch = main
