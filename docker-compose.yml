@@ -1,0 +1,62 @@
+version: '3.6'
+services:
+  redmine:
+    build:
+      context: ./redmine
+      args:
+        REDMINE_RAILS_ENVIRONMENT: production
+        REDMINE_VERSION: ${REDMINE_VERSION}
+        REDMINE_DOWNLOAD_SHA256: ${REDMINE_DOWNLOAD_SHA256}
+    restart: unless-stopped
+    ports:
+      - ${REDMINE_PORT}:3000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    environment:
+      REDMINE_DB_MYSQL: ${REDMINE_DB_MYSQL}
+      REDMINE_DB_DATABASE: ${REDMINE_DB_DATABASE}
+      REDMINE_DB_USERNAME: ${REDMINE_DB_USERNAME}
+      REDMINE_DB_PASSWORD: ${REDMINE_DB_PASSWORD}
+      REDMINE_PLUGINS_MIGRATE: ${REDMINE_PLUGINS_MIGRATE}
+      REDMINE_SECRET_KEY_BASE: supersecretkey
+    volumes:
+      - ./redmine_data/files:/usr/src/redmine/files
+      - ./redmine_plugins:/usr/src/redmine/plugins
+      - ./redmine_themes:/usr/src/redmine/public/themes
+      - ./redmine_patchs:/usr/src/redmine/patchs
+      - ./redmine/config/puma.rb:/usr/src/redmine/config/puma.rb
+      - ./redmine/config/configuration.yml:/usr/src/redmine/config/configuration.yml
+      - ./redmine/config/environments/production.rb:/usr/src/redmine/config/environments/production.rb
+      - /srv/git:/srv/git
+    depends_on:
+      - mysql_redmine
+
+  mysql_redmine:
+    image: mysql:8.0.17
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      - MYSQL_ROOT_PASSWORD=${REDMINE_DB_PASSWORD}
+      - MYSQL_DATABASE=${REDMINE_DB_DATABASE}
+    volumes:
+      - ./redmine_data/nobackup/mysql-data_red:/var/lib/mysql
+    ports:
+      - "33063:3306"
+    healthcheck:
+      test: "mysqladmin -h localhost -u root -p${MYSQL_ROOT_PASSWORD} ping > /dev/null 2>&1 || exit 1"
+      interval: 1m30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    labels:
+      autoheal: 'true'
+
+

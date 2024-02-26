@@ -1,0 +1,21 @@
+version: '3.6'
+services:
+  redmine:
+    build:
+      args:
+        REDMINE_RAILS_ENVIRONMENT: development
+    environment:
+      REDMINE_DB_DATABASE: ${REDMINE_DB_DATABASE_DEV}
+    volumes:
+      - ./redmine/config/environments/development.rb:/usr/src/redmine/config/environments/development.rb
+  mysql_redmine:
+    environment:
+      - MYSQL_DATABASE=${REDMINE_DB_DATABASE_DEV}
+    volumes:
+      - ./redmine_data/mysql-data_red_dev:/var/lib/mysql
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: always
+    ports:
+      - 1025:1025
+      - 8025:8025
