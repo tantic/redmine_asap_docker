@@ -8,7 +8,7 @@ This repo is the docker image for redmine asap suite which contains
 
 ```
 git clone https://github.com/tantic/redmine_asap_docker.git
-cd redmine-prod-docker
+cd redmine_asap_docker
 ```
 
 As you can see, the plugin folder is empty. We need to fetch it from his repo.
