@@ -11,9 +11,11 @@ git clone https://github.com/tantic/redmine_asap_docker.git
 cd redmine-prod-docker
 ```
 
-Get submodules
+As you can see, the plugin folder is empty. We need to fetch it from his repo.
+
 ```
-git submodule update --init --recursive
+git submodule init
+git submodule update
 ```
 
 # Configuration
@@ -38,4 +40,21 @@ REDMINE_PORT=3000
 docker compose up -d
 ```
 
-Go to the url https://localhost:3000
+Go to the url http://localhost:3000
+
+# Administration
+
+By default Redmine is in public mode which is not supported yet by the plugins.
+
+First, you need to configure private mode.
+Go to the url http://localhost:3000/admin
+Enter default login for admin i.e. admin/admin
+
+# Update / Upgrade
+
+To update plugin, just use these commands
+```
+docker compose down
+git submodule update --remote
+docker compose up -d
+```
