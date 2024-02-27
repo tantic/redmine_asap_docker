@@ -49,6 +49,10 @@ By default Redmine is in public mode which is not supported yet by the plugins.
 First, you need to configure private mode.
 Go to the url http://localhost:3000/admin
 Enter default login for admin i.e. admin/admin
+Change password
+Go to administration > Configuration > Authentication > Authentication required = Yes
+
+You can then choose login wallpaper and test other pages
 
 # Update / Upgrade
 
