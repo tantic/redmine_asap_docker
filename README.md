@@ -16,6 +16,7 @@ As you can see, the plugin folder is empty. We need to fetch it from his repo.
 ```
 git submodule init
 git submodule update
+git submodule update --recursive --remote
 ```
 
 # Configuration
