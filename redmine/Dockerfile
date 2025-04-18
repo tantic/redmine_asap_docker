@@ -1,4 +1,4 @@
-FROM ruby:3.1-slim-bullseye
+FROM ruby:3.3-slim-bookworm
 
 # explicitly set uid/gid to guarantee that it won't change in the future
 # the values 999:999 are identical to the current user/group id assigned
@@ -8,38 +8,53 @@ RUN groupadd -r -g 999 redmine && useradd -r -g redmine -u 999 redmine
 RUN set -eux; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
-		ca-certificates \
-    curl \
-		wget \
-		\
 		bzr \
+		ca-certificates \
+		ghostscript \
 		git \
+		gsfonts \
+		imagemagick \
 		mercurial \
 		openssh-client \
 		subversion \
-		openssl \
-		shared-mime-info \
-		ruby-dev \
-		build-essential \
-		libreoffice \
-		default-libmysqlclient-dev \
-		libssl-dev \
-		\
-# we need "gsfonts" for generating PNGs of Gantt charts
-# and "ghostscript" for creating PDF thumbnails (in 4.1+)
-		ghostscript \
-		gsfonts \
-		imagemagick \
-# grab gosu for easy step-down from root
-		gosu \
-# grab tini for signal processing and zombie killing
 		tini \
+		wget \
 	; \
 # allow imagemagick to use ghostscript for PDF -> PNG thumbnail conversion (4.1+)
 	sed -ri 's/(rights)="none" (pattern="PDF")/\1="read" \2/' /etc/ImageMagick-6/policy.xml; \
 	rm -rf /var/lib/apt/lists/*
 
-# RUN gem install puma -- --with-cflags="-Wno-error=implicit-function-declaration"
+
+# grab gosu for easy step-down from root
+# https://github.com/tianon/gosu/releases
+ENV GOSU_VERSION 1.17
+RUN set -eux; \
+	\
+	savedAptMark="$(apt-mark showmanual)"; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
+		gnupg \
+	; \
+	rm -rf /var/lib/apt/lists/*; \
+	\
+	dpkgArch="$(dpkg --print-architecture | awk -F- '{ print $NF }')"; \
+	wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch"; \
+	wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch.asc"; \
+	export GNUPGHOME="$(mktemp -d)"; \
+	gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4; \
+	gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu; \
+	gpgconf --kill all; \
+	rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc; \
+	\
+	apt-mark auto '.*' > /dev/null; \
+	apt-mark manual $savedAptMark > /dev/null; \
+	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
+	\
+# smoke test
+	chmod +x /usr/local/bin/gosu; \
+	gosu --version; \
+	gosu nobody true
+
 
 ARG REDMINE_RAILS_ENVIRONMENT
 ENV RAILS_ENV ${REDMINE_RAILS_ENVIRONMENT}
@@ -59,21 +74,22 @@ ARG REDMINE_VERSION
 ARG REDMINE_DOWNLOAD_SHA256
 ENV REDMINE_VERSION ${REDMINE_VERSION}
 ENV REDMINE_DOWNLOAD_SHA256 ${REDMINE_DOWNLOAD_SHA256}
+
 RUN set -eux; \
-	curl -fL -o redmine.tar.gz "https://redmine.org/releases/redmine-${REDMINE_VERSION}.tar.gz"; \
+	wget -O redmine.tar.gz "https://redmine.org/releases/redmine-${REDMINE_VERSION}.tar.gz"; \
 	echo "$REDMINE_DOWNLOAD_SHA256 *redmine.tar.gz" | sha256sum -c -; \
 	tar -xf redmine.tar.gz --strip-components=1; \
 	rm redmine.tar.gz files/delete.me log/delete.me; \
-	mkdir -p log public/plugin_assets sqlite tmp/pdf tmp/pids; \
+	# https://www.redmine.org/projects/redmine/wiki/RedmineInstall#Step-8-File-system-permissions
+	mkdir -p log public/assets public/plugin_assets sqlite tmp/pdf tmp/pids; \
 	chown -R redmine:redmine ./; \
-# log to STDOUT (https://github.com/docker-library/redmine/issues/108)
-	echo 'config.logger = Logger.new(STDOUT)' > config/additional_environment.rb; \
 # fix permissions for running as an arbitrary user
 	chmod -R ugo=rwX config db sqlite; \
 	find log tmp -type d -exec chmod 1777 '{}' +
 
+
+
 RUN set -eux; \
-	\
 	savedAptMark="$(apt-mark showmanual)"; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
@@ -82,13 +98,17 @@ RUN set -eux; \
 		gcc \
 		libpq-dev \
 		libsqlite3-dev \
+		libxml2-dev \
+		libxslt-dev \
+		libyaml-dev \
 		make \
 		patch \
+		pkgconf \
 		xz-utils \
 	; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
-	gosu redmine bundle config --local without 'test'; \
+	gosu redmine bundle config --local without 'development test'; \
 # https://github.com/redmine/redmine/commit/23dc108e70a0794f444803ac827a690085dcd557
 # ("gem puma" already exists in the Gemfile, but under "group :test" and we want it all the time)
 	puma="$(grep -E "^[[:space:]]*gem [:'\"]puma['\",[:space:]].*\$" Gemfile)"; \
@@ -100,6 +120,8 @@ RUN set -eux; \
 		echo "$adapter:" >> ./config/database.yml; \
 		echo "  adapter: $adapter" >> ./config/database.yml; \
 	done; \
+# nokogiri's vendored libxml2 + libxslt do not build on mips64le, so use the apt packages when building
+	gosu redmine bundle config build.nokogiri --use-system-libraries; \
 	gosu redmine bundle install --jobs "$(nproc)"; \
 	rm ./config/database.yml; \
 # fix permissions for running as an arbitrary user
@@ -110,9 +132,8 @@ RUN set -eux; \
 	apt-mark auto '.*' > /dev/null; \
 	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
 	find /usr/local -type f -executable -exec ldd '{}' ';' \
-		| awk '/=>/ { print $(NF-1) }' \
+		| awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); printf "*%s\n", so }' \
 		| sort -u \
-		| grep -v '^/usr/local/' \
 		| xargs -r dpkg-query --search \
 		| cut -d: -f1 \
 		| sort -u \

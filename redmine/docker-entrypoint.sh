@@ -26,19 +26,19 @@ file_env() {
 
 isLikelyRedmine=
 case "$1" in
-	rails | rake | passenger ) isLikelyRedmine=1 ;;
+	rails | rake ) isLikelyRedmine=1 ;;
 esac
 
 _fix_permissions() {
 	# https://www.redmine.org/projects/redmine/wiki/RedmineInstall#Step-8-File-system-permissions
-	local dirs=( config log public/plugin_assets tmp ) args=()
+	local dirs=( config log public/assets public/plugin_assets tmp ) args=()
 	if [ "$(id -u)" = '0' ]; then
 		args+=( ${args[@]:+,} '(' '!' -user redmine -exec chown redmine:redmine '{}' + ')' )
 
 		# https://github.com/docker-library/redmine/issues/268 - scanning "files" might be *really* expensive, so we should skip it if it seems like it's "already correct"
 		local filesOwnerMode
 		filesOwnerMode="$(stat -c '%U:%a' files)"
-		if [ "$files" != 'redmine:755' ]; then
+		if [ "$filesOwnerMode" != 'redmine:755' ]; then
 			dirs+=( files )
 		fi
 	fi
@@ -56,8 +56,8 @@ fi
 
 if [ -n "$isLikelyRedmine" ]; then
 	_fix_permissions
-  if [ ! -f './config/database.yml' ]; then
-    file_env 'REDMINE_DB_MYSQL'
+	if [ ! -f './config/database.yml' ]; then
+		file_env 'REDMINE_DB_MYSQL'
 		file_env 'REDMINE_DB_POSTGRES'
 		file_env 'REDMINE_DB_SQLSERVER'
 
@@ -114,7 +114,7 @@ if [ -n "$isLikelyRedmine" ]; then
 
 		REDMINE_DB_ADAPTER="$adapter"
 		REDMINE_DB_HOST="$host"
-    echo "$RAILS_ENV:" > config/database.yml
+		echo "$RAILS_ENV:" > config/database.yml
 		for var in \
 			adapter \
 			host \
@@ -127,24 +127,36 @@ if [ -n "$isLikelyRedmine" ]; then
 			env="REDMINE_DB_${var^^}"
 			val="${!env}"
 			[ -n "$val" ] || continue
-			echo "  $var: \"$val\"" >> config/database.yml
+			if [ "$var" != 'adapter' ]; then
+				# https://github.com/docker-library/redmine/issues/353 🙃
+				val='"'"$val"'"'
+				# (only add double quotes to every value *except* `adapter: xxx`)
+			fi
+			echo "  $var: $val" >> config/database.yml
 		done
 	fi
 
 	# install additional gems for Gemfile.local and plugins
 	bundle check || bundle install
 
-	if [ ! -s config/secrets.yml ]; then
-		file_env 'REDMINE_SECRET_KEY_BASE'
-		if [ -n "$REDMINE_SECRET_KEY_BASE" ]; then
-			cat > 'config/secrets.yml' <<-YML
-				$RAILS_ENV:
-				  secret_key_base: "$REDMINE_SECRET_KEY_BASE"
-			YML
-		elif [ ! -f config/initializers/secret_token.rb ]; then
-			rake generate_secret_token
-		fi
+	file_env 'REDMINE_SECRET_KEY_BASE'
+	# just use the rails variable rather than trying to put it into a yml file
+	# https://github.com/rails/rails/blob/6-1-stable/railties/lib/rails/application.rb#L438
+	# https://github.com/rails/rails/blob/1aa9987169213ce5ce43c20b2643bc64c235e792/railties/lib/rails/application.rb#L484 (rails 7.1-stable)
+	if [ -n "${SECRET_KEY_BASE}" ] && [ -n "${REDMINE_SECRET_KEY_BASE}" ]; then
+		echo >&2
+		echo >&2 'warning: both SECRET_KEY_BASE and REDMINE_SECRET_KEY_BASE{_FILE} set, only SECRET_KEY_BASE will apply'
+		echo >&2
 	fi
+	: "${SECRET_KEY_BASE:=$REDMINE_SECRET_KEY_BASE}"
+	export SECRET_KEY_BASE
+	# generate SECRET_KEY_BASE if not set; this is not recommended unless the secret_token.rb is saved when container is recreated
+	if [ -z "$SECRET_KEY_BASE" ] && [ ! -f config/initializers/secret_token.rb ]; then
+		echo >&2 'warning: no *SECRET_KEY_BASE set; running `rake generate_secret_token` to create one in "config/initializers/secret_token.rb"'
+		unset SECRET_KEY_BASE # just in case
+		rake generate_secret_token
+	fi
+
 	if [ "$1" != 'rake' -a -z "$REDMINE_NO_DB_MIGRATE" ]; then
 		rake db:migrate
 	fi
@@ -155,11 +167,6 @@ if [ -n "$isLikelyRedmine" ]; then
 
 	# remove PID file to enable restarting the container
 	rm -f tmp/pids/server.pid
-
-	if [ "$1" = 'passenger' ]; then
-		# Don't fear the reaper.
-		set -- tini -- "$@"
-	fi
 fi
 
 # Lancement des patchs
