@@ -2,3 +2,6 @@
 	path = redmine_plugins/redmine_asap_theme
 	url = https://github.com/tantic/redmine_asap_theme.git
 	branch = main
+[submodule "redmine_plugins/redmine_asap_user_features"]
+	path = redmine_plugins/redmine_asap_user_features
+	url = https://github.com/tantic/redmine_asap_user_features.git
