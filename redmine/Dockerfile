@@ -1,4 +1,4 @@
-FROM ruby:3.3-slim-bookworm
+FROM ruby:3.4-slim-bookworm
 
 # explicitly set uid/gid to guarantee that it won't change in the future
 # the values 999:999 are identical to the current user/group id assigned
@@ -16,18 +16,25 @@ RUN set -eux; \
 		imagemagick \
 		mercurial \
 		openssh-client \
+    shared-mime-info \
 		subversion \
 		tini \
 		wget \
+    build-essential \
+		libreoffice \
+		default-libmysqlclient-dev \
+		libssl-dev \
+    ruby-dev \
 	; \
 # allow imagemagick to use ghostscript for PDF -> PNG thumbnail conversion (4.1+)
 	sed -ri 's/(rights)="none" (pattern="PDF")/\1="read" \2/' /etc/ImageMagick-6/policy.xml; \
 	rm -rf /var/lib/apt/lists/*
 
+# RUN gem install puma -- --with-cflags="-Wno-error=implicit-function-declaration"
 
 # grab gosu for easy step-down from root
 # https://github.com/tianon/gosu/releases
-ENV GOSU_VERSION 1.17
+ENV GOSU_VERSION 1.19
 RUN set -eux; \
 	\
 	savedAptMark="$(apt-mark showmanual)"; \
@@ -55,7 +62,6 @@ RUN set -eux; \
 	gosu --version; \
 	gosu nobody true
 
-
 ARG REDMINE_RAILS_ENVIRONMENT
 ENV RAILS_ENV ${REDMINE_RAILS_ENVIRONMENT}
 WORKDIR /usr/src/redmine
@@ -74,28 +80,27 @@ ARG REDMINE_VERSION
 ARG REDMINE_DOWNLOAD_SHA256
 ENV REDMINE_VERSION ${REDMINE_VERSION}
 ENV REDMINE_DOWNLOAD_SHA256 ${REDMINE_DOWNLOAD_SHA256}
-
 RUN set -eux; \
 	wget -O redmine.tar.gz "https://redmine.org/releases/redmine-${REDMINE_VERSION}.tar.gz"; \
 	echo "$REDMINE_DOWNLOAD_SHA256 *redmine.tar.gz" | sha256sum -c -; \
 	tar -xf redmine.tar.gz --strip-components=1; \
 	rm redmine.tar.gz files/delete.me log/delete.me; \
-	# https://www.redmine.org/projects/redmine/wiki/RedmineInstall#Step-8-File-system-permissions
+  # https://www.redmine.org/projects/redmine/wiki/RedmineInstall#Step-8-File-system-permissions
 	mkdir -p log public/assets public/plugin_assets sqlite tmp/pdf tmp/pids; \
 	chown -R redmine:redmine ./; \
 # fix permissions for running as an arbitrary user
 	chmod -R ugo=rwX config db sqlite; \
 	find log tmp -type d -exec chmod 1777 '{}' +
 
-
-
 RUN set -eux; \
 	savedAptMark="$(apt-mark showmanual)"; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
+		cargo \
 		default-libmysqlclient-dev \
 		freetds-dev \
 		gcc \
+		libclang-dev \
 		libpq-dev \
 		libsqlite3-dev \
 		libxml2-dev \
@@ -108,7 +113,7 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
-	gosu redmine bundle config --local without 'development test'; \
+	gosu redmine bundle config --local without 'test'; \
 # https://github.com/redmine/redmine/commit/23dc108e70a0794f444803ac827a690085dcd557
 # ("gem puma" already exists in the Gemfile, but under "group :test" and we want it all the time)
 	puma="$(grep -E "^[[:space:]]*gem [:'\"]puma['\",[:space:]].*\$" Gemfile)"; \
@@ -120,7 +125,7 @@ RUN set -eux; \
 		echo "$adapter:" >> ./config/database.yml; \
 		echo "  adapter: $adapter" >> ./config/database.yml; \
 	done; \
-# nokogiri's vendored libxml2 + libxslt do not build on mips64le, so use the apt packages when building
+  # nokogiri's vendored libxml2 + libxslt do not build on mips64le, so use the apt packages when building
 	gosu redmine bundle config build.nokogiri --use-system-libraries; \
 	gosu redmine bundle install --jobs "$(nproc)"; \
 	rm ./config/database.yml; \
@@ -134,12 +139,17 @@ RUN set -eux; \
 	find /usr/local -type f -executable -exec ldd '{}' ';' \
 		| awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); printf "*%s\n", so }' \
 		| sort -u \
-		| xargs -r dpkg-query --search \
-		| cut -d: -f1 \
+		| xargs -rt dpkg-query --search \
+# https://manpages.debian.org/trixie/dpkg/dpkg-query.1.en.html#S (we ignore diversions and it'll be really unusual for more than one package to provide any given .so file)
+		| awk 'sub(":$", "", $1) { print $1 }' \
 		| sort -u \
 		| xargs -r apt-mark manual \
 	; \
 	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
+
+
+
+# RUN gosu redmine bundle exec rake assets:precompile
 
 VOLUME /usr/src/redmine/files
 
