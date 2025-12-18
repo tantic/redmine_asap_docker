@@ -2,7 +2,7 @@
 
 This repo is the docker image for redmine asap suite which contains
 * Redmine core (6.1.0)
-* Redmine asap theme (2.0.1)
+* Redmine asap theme (2.1.2)
 * Redmine asap user features (1.1.0)
 
 # Installation
@@ -10,14 +10,7 @@ This repo is the docker image for redmine asap suite which contains
 ```
 git clone https://github.com/tantic/redmine_asap_docker.git
 cd redmine_asap_docker
-```
-
-As you can see, the plugin folder is empty. We need to fetch it from his repo.
-
-```
-git submodule init
-git submodule update
-git submodule update --recursive --remote
+git submodule update --init --recursive --remote
 ```
 
 # Configuration
@@ -29,9 +22,9 @@ cp .env.example .env
 Change variables if necessary
 ```
 # REDMINE
-REDMINE_VERSION=5.1.1
+REDMINE_VERSION=6.1.0
 # .tar.gz from https://redmine.org/projects/redmine/wiki/Download
-REDMINE_DOWNLOAD_SHA256=edf3095746effd04ad5140681d618f5fa8d06be09c47b6f8b615dcad0b753e6e
+REDMINE_DOWNLOAD_SHA256=bc483da195f2444491d870e40f7fc909ae750f7ba8d0e28831e6d6c478812b88
 REDMINE_PLUGINS_MIGRATE=true
 REDMINE_PORT=3000
 ```
