@@ -147,9 +147,24 @@ RUN set -eux; \
 	; \
 	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 
+COPY redmine_plugins/ /usr/src/redmine/plugins/
+# COPY redmine_themes/ /usr/src/redmine/themes/
+# COPY redmine_patchs/ /usr/src/redmine/patchs/
 
 
-# RUN gosu redmine bundle exec rake assets:precompile
+# COPY redmine_patchs/ /usr/src/redmine/patchs/
+
+# RUN set -eux; \
+#     cd /usr/src/redmine; \
+#     for p in patchs/*.patch; do \
+#         echo "Applying $p"; \
+#         patch -p1 < "$p"; \
+#     done
+
+# Installation des gems des plugins
+RUN set -eux; \
+    gosu redmine bundle install --jobs "$(nproc)";
+
 
 VOLUME /usr/src/redmine/files
 

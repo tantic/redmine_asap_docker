@@ -5,3 +5,7 @@
 [submodule "redmine_plugins/redmine_asap_user_features"]
 	path = redmine_plugins/redmine_asap_user_features
 	url = https://github.com/tantic/redmine_asap_user_features.git
+[submodule "redmine_plugins/redmine_base_deface"]
+	path = redmine_plugins/redmine_base_deface
+	url = git@gitlab.asap.dsna.fr:asap/redmine/plugins/community/redmine_base_deface
+  branch = 6.0.1

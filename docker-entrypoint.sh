@@ -27,6 +27,7 @@ file_env() {
 isLikelyRedmine=
 case "$1" in
 	rails | rake ) isLikelyRedmine=1 ;;
+	bundle ) if [ "${2:-}" = 'exec' ]; then isLikelyRedmine=1; fi ;; # https://github.com/docker-library/redmine/pull/386 - "bundle exec sidekiq"
 esac
 
 _fix_permissions() {
@@ -56,8 +57,8 @@ fi
 
 if [ -n "$isLikelyRedmine" ]; then
 	_fix_permissions
-	if [ ! -f './config/database.yml' ]; then
-		file_env 'REDMINE_DB_MYSQL'
+  if [ ! -f './config/database.yml' ]; then
+    file_env 'REDMINE_DB_MYSQL'
 		file_env 'REDMINE_DB_POSTGRES'
 		file_env 'REDMINE_DB_SQLSERVER'
 
@@ -137,33 +138,42 @@ if [ -n "$isLikelyRedmine" ]; then
 	fi
 
 	# install additional gems for Gemfile.local and plugins
-	bundle check || bundle install
+	# bundle check || bundle install
+  # bundle update redmineup
 
 	file_env 'REDMINE_SECRET_KEY_BASE'
 	# just use the rails variable rather than trying to put it into a yml file
 	# https://github.com/rails/rails/blob/6-1-stable/railties/lib/rails/application.rb#L438
 	# https://github.com/rails/rails/blob/1aa9987169213ce5ce43c20b2643bc64c235e792/railties/lib/rails/application.rb#L484 (rails 7.1-stable)
-	if [ -n "${SECRET_KEY_BASE}" ] && [ -n "${REDMINE_SECRET_KEY_BASE}" ]; then
+	if [ -n "${SECRET_KEY_BASE:-}" ] && [ -n "${REDMINE_SECRET_KEY_BASE:-}" ]; then
 		echo >&2
 		echo >&2 'warning: both SECRET_KEY_BASE and REDMINE_SECRET_KEY_BASE{_FILE} set, only SECRET_KEY_BASE will apply'
 		echo >&2
 	fi
-	: "${SECRET_KEY_BASE:=$REDMINE_SECRET_KEY_BASE}"
+	: "${SECRET_KEY_BASE:=${REDMINE_SECRET_KEY_BASE:-}}"
 	export SECRET_KEY_BASE
-	# generate SECRET_KEY_BASE if not set; this is not recommended unless the secret_token.rb is saved when container is recreated
-	if [ -z "$SECRET_KEY_BASE" ] && [ ! -f config/initializers/secret_token.rb ]; then
-		echo >&2 'warning: no *SECRET_KEY_BASE set; running `rake generate_secret_token` to create one in "config/initializers/secret_token.rb"'
-		unset SECRET_KEY_BASE # just in case
-		rake generate_secret_token
+	if [ -z "$SECRET_KEY_BASE" ]; then
+		# https://github.com/docker-library/redmine/issues/397
+		# empty string is truthy in ruby and so masks the generated fallback config
+		# https://github.com/rails/rails/blob/1aa9987169213ce5ce43c20b2643bc64c235e792/railties/lib/rails/application.rb#L454
+		unset SECRET_KEY_BASE
+		# generate SECRET_KEY_BASE in-file since it is not set or empty; this is not recommended unless the secret_token.rb is saved when container is recreated
+		if [ ! -f config/initializers/secret_token.rb ]; then
+			echo >&2
+			echo >&2 'warning: no *SECRET_KEY_BASE set; running `rake generate_secret_token` to create one in "config/initializers/secret_token.rb"'
+			echo >&2
+			rake generate_secret_token
+		fi
 	fi
 
 	if [ "$1" != 'rake' -a -z "$REDMINE_NO_DB_MIGRATE" ]; then
 		rake db:migrate
 	fi
 
-	if [ "$1" != 'rake' -a -n "$REDMINE_PLUGINS_MIGRATE" ]; then
-		rake redmine:plugins:migrate
-	fi
+	if [ "$REDMINE_PLUGINS_MIGRATE" = "true" ] && [ ! -f .plugins_migrated ]; then
+    rake redmine:plugins:migrate
+    touch .plugins_migrated
+  fi
 
 	# remove PID file to enable restarting the container
 	rm -f tmp/pids/server.pid
@@ -174,7 +184,8 @@ CONTAINER_ALREADY_STARTED="CONTAINER_ALREADY_STARTED_PLACEHOLDER"
 if [ ! -e $CONTAINER_ALREADY_STARTED ]; then
     touch $CONTAINER_ALREADY_STARTED
     echo "-- First container startup --"
-    # git apply patchs/upgrade_redmine5_patch_utilisateurs_externes.patch
+    # git apply  --ignore-space-change --ignore-whitespace patchs/upgrade_redmine5_patch_utilisateurs_externes.patch
+    # git apply  --ignore-space-change --ignore-whitespace patchs/upgrade_redmine5_patch_encodage_mail.patch
 else
     echo "-- Not first container startup --"
 fi

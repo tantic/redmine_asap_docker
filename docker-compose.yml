@@ -1,8 +1,7 @@
-version: '3.6'
 services:
   redmine:
     build:
-      context: ./redmine
+      context: .
       args:
         REDMINE_RAILS_ENVIRONMENT: production
         REDMINE_VERSION: ${REDMINE_VERSION}
@@ -24,12 +23,8 @@ services:
       REDMINE_SECRET_KEY_BASE: supersecretkey
     volumes:
       - ./redmine_data/files:/usr/src/redmine/files
-      - ./redmine_plugins:/usr/src/redmine/plugins
-      - ./redmine_themes:/usr/src/redmine/public/themes
-      - ./redmine_patchs:/usr/src/redmine/patchs
       - ./redmine/config/puma.rb:/usr/src/redmine/config/puma.rb
       - ./redmine/config/configuration.yml:/usr/src/redmine/config/configuration.yml
-      - ./redmine/config/environments/production.rb:/usr/src/redmine/config/environments/production.rb
       - /srv/git:/srv/git
     depends_on:
       - mysql_redmine
