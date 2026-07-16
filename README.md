@@ -1,8 +1,8 @@
 # Redmine asap docker
 
 This repo is the docker image for redmine asap suite which contains
-* Redmine core (6.1.0)
-* Redmine asap theme (2.1.2)
+* Redmine core (6.1.3)
+* Redmine asap theme (2.4.1)
 * Redmine asap user features (1.1.0)
 
 # Installation
