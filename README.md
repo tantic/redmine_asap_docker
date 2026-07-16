@@ -22,9 +22,9 @@ cp .env.example .env
 Change variables if necessary
 ```
 # REDMINE
-REDMINE_VERSION=6.1.0
+REDMINE_VERSION=6.1.3
 # .tar.gz from https://redmine.org/projects/redmine/wiki/Download
-REDMINE_DOWNLOAD_SHA256=bc483da195f2444491d870e40f7fc909ae750f7ba8d0e28831e6d6c478812b88
+REDMINE_DOWNLOAD_SHA256=61db3008c7fd18a3afc559ed656fd38fdf8df8220ac69598b319095183190b7a
 REDMINE_PLUGINS_MIGRATE=true
 REDMINE_PORT=3000
 ```
@@ -37,9 +37,11 @@ docker compose up -d
 
 Go to the url http://localhost:3000
 
+Adapt the port number to the one set in the .env file
+
 # Administration
 
-By default Redmine is in public mode which is not supported yet by the plugins.
+By default Redmine is in public mode (no authentication) which is not supported yet by the plugins.
 
 First, you need to configure private mode.
 Go to the url http://localhost:3000/admin
